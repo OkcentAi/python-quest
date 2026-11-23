@@ -7,15 +7,17 @@ const KIND = {
   fill: "Заполни пропуск",
   bug: "Найди ошибку",
   choice: "Выбери ответ",
-  order: "Расставь строки по порядку",
+  order: "Расставь по порядку",
+  logic: "Задача на логику",
+  trace: "Следи за значением",
 };
 
 function loadState() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY));
-    if (s && typeof s === "object") return { xp: s.xp || 0, best: s.best || {}, mistakes: s.mistakes || [] };
+    if (s && typeof s === "object") return { xp: s.xp || 0, best: s.best || {}, mistakes: s.mistakes || [], tab: s.tab || "bot" };
   } catch (e) {}
-  return { xp: 0, best: {}, mistakes: [] };
+  return { xp: 0, best: {}, mistakes: [], tab: "bot" };
 }
 let state = loadState();
 function saveState() {
@@ -34,16 +36,21 @@ function shuffle(arr) {
 
 // У каждого вопроса появляется id вида "lists-3" — по нему копим ошибки
 const ALL = {};
-COURSE.forEach((b) => b.questions.forEach((q, i) => { q.id = b.id + "-" + i; ALL[q.id] = q; }));
+SECTIONS.forEach((s) => s.blocks.forEach((b) => b.questions.forEach((q, i) => {
+  q.id = b.id + "-" + i; q.section = s.id; ALL[q.id] = q;
+})));
 
 function home() {
-  const mistakes = state.mistakes.filter((id) => ALL[id]);
+  const section = SECTIONS.find((s) => s.id === state.tab) || SECTIONS[0];
+  const mistakes = state.mistakes.filter((id) => ALL[id] && ALL[id].section === section.id);
   app.innerHTML = `
-    <header class="top"><h1>🐍 Python Quest</h1><div class="xp">⭐ ${state.xp} XP</div></header>
-    <p class="lead">Повторяем то, что ты уже сделал в боте. 5–10 минут в метро.</p>
+    <header class="top"><h1>Python Quest</h1><div class="xp">⭐ ${state.xp} XP</div></header>
+    <div class="tabs">${SECTIONS.map((s) =>
+      `<button class="tab${s.id === section.id ? " on" : ""}" data-tab="${s.id}">${esc(s.title)}</button>`).join("")}</div>
+    <p class="lead">${esc(section.intro)}</p>
     ${mistakes.length ? `<button class="btn review" id="review">🔁 Повторить ошибки (${mistakes.length})</button>` : ""}
     <div class="blocks">
-      ${COURSE.map((b, i) => {
+      ${section.blocks.map((b, i) => {
         const best = state.best[b.id];
         return `<button class="block" data-i="${i}">
           <span class="num">${String(i + 1).padStart(2, "0")}</span>
@@ -53,7 +60,10 @@ function home() {
       }).join("")}
     </div>`;
   app.querySelectorAll(".block").forEach((el) => {
-    el.onclick = () => { const b = COURSE[el.dataset.i]; start(b.questions, b); };
+    el.onclick = () => { const b = section.blocks[el.dataset.i]; start(b.questions, b); };
+  });
+  app.querySelectorAll(".tab").forEach((el) => {
+    el.onclick = () => { state.tab = el.dataset.tab; saveState(); home(); };
   });
   const r = document.getElementById("review");
   if (r) r.onclick = () => start(shuffle(mistakes.map((id) => ALL[id])), null);
